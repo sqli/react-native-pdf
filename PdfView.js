@@ -58,7 +58,7 @@ export default class PdfView extends Component {
         currentPage: -1,
         enablePaging: false,
         singlePage: false,
-        onPageSingleTap: (page, x, y) => {
+        onPageSingleTap: (page, pageWidth, pageHeight, x, y) => {
         },
         onScaleChanged: (scale) => {
         },
@@ -223,7 +223,7 @@ export default class PdfView extends Component {
 
     _onItemSingleTap = (index, x, y) => {
 
-        this.props.onPageSingleTap(index + 1, x, y);
+        this.props.onPageSingleTap(index + 1, this._getPageWidth, this._getPageHeight, x, y);
 
     };
 

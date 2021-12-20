@@ -804,8 +804,11 @@ using namespace facebook::react;
     PDFPage *pdfPage = [_pdfView pageForPoint:point nearest:NO];
     if (pdfPage) {
         unsigned long page = [_pdfDocument indexForPage:pdfPage];
+        CGPoint locationOnPage = [_pdfView convertPoint:point toPage:pdfPage];
+        CGRect pageRect = [pdfPage boundsForBox:kPDFDisplayBoxCropBox];
         [self notifyOnChangeWithMessage:
          [[NSString alloc] initWithString:[NSString stringWithFormat:@"pageSingleTap|%lu|%f|%f", page+1, point.x, point.y]]];
+         [[NSString alloc] initWithString:[NSString stringWithFormat:@"pageSingleTap|%lu|%f|%f|%f|%f", page+1, pageRect.size.width, pageRect.size.height, locationOnPage.x, locationOnPage.y]]];
     }
 
     //[self setNeedsDisplay];
