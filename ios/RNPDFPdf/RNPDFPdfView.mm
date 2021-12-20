@@ -808,7 +808,7 @@ using namespace facebook::react;
         CGRect pageRect = [pdfPage boundsForBox:kPDFDisplayBoxCropBox];
         [self notifyOnChangeWithMessage:
          [[NSString alloc] initWithString:[NSString stringWithFormat:@"pageSingleTap|%lu|%f|%f", page+1, point.x, point.y]]];
-         [[NSString alloc] initWithString:[NSString stringWithFormat:@"pageSingleTap|%lu|%f|%f|%f|%f", page+1, pageRect.size.width, pageRect.size.height, locationOnPage.x, locationOnPage.y]]];
+         [[NSString alloc] initWithString:[NSString stringWithFormat:@"pageSingleTap|%lu|%f|%f|%f|%f", page+1, pageRect.size.width, pageRect.size.height, locationOnPage.x, locationOnPage.y]];
     }
 
     //[self setNeedsDisplay];

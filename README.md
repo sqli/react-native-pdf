@@ -217,6 +217,9 @@ v6.5.0
 4. Add: Typed "source" prop
 5. Remove: dependency to fbjs
 
+v6.4.1
+1. Use relative coordinate on `onPageSingleTap`
+
 v6.4.0
 1. Remove sample for reducing NPM package size
 2. Add support for setting a filename for the cached pdf file
