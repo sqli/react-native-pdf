@@ -12,20 +12,22 @@ import java.io.File;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.util.SizeF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.util.Log;
+import android.graphics.PointF;
 import android.net.Uri;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.graphics.Canvas;
+import javax.annotation.Nullable;
 
 
 import com.github.barteksc.pdfviewer.PDFView;
 import com.github.barteksc.pdfviewer.listener.OnPageChangeListener;
 import com.github.barteksc.pdfviewer.listener.OnLoadCompleteListener;
 import com.github.barteksc.pdfviewer.listener.OnErrorListener;
+import com.github.barteksc.pdfviewer.listener.OnRenderListener;
 import com.github.barteksc.pdfviewer.listener.OnTapListener;
 import com.github.barteksc.pdfviewer.listener.OnDrawListener;
 import com.github.barteksc.pdfviewer.listener.OnPageScrollListener;
@@ -39,6 +41,7 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.uimanager.SimpleViewManager;
+import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.uimanager.events.RCTEventEmitter;
 import com.facebook.react.common.MapBuilder;
@@ -50,21 +53,26 @@ import static java.lang.String.format;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.lang.ClassCastException;
 
+import com.shockwave.pdfium.PdfDocument;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.shockwave.pdfium.util.SizeF;
 
 public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompleteListener,OnErrorListener,OnTapListener,OnDrawListener,OnPageScrollListener, LinkHandler {
+    private ThemedReactContext context;
     private int page = 1;               // start from 1
     private boolean horizontal = false;
     private float scale = 1;
     private float minScale = 1;
     private float maxScale = 3;
+    private String asset;
     private String path;
     private int spacing = 10;
     private String password = "";
     private boolean enableAntialiasing = true;
     private boolean enableAnnotationRendering = true;
-    private boolean enableDoubleTapZoom = true;
 
     private boolean enablePaging = false;
     private boolean autoSpacing = false;
@@ -73,16 +81,16 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
     private FitPolicy fitPolicy = FitPolicy.WIDTH;
     private boolean singlePage = false;
 
+    private static PdfView instance = null;
+
     private float originalWidth = 0;
     private float lastPageWidth = 0;
     private float lastPageHeight = 0;
 
-    // used to store the parameters for `super.onSizeChanged`
-    private int oldW = 0;
-    private int oldH = 0;
-
-    public PdfView(Context context, AttributeSet set){
-        super(context, set);
+    public PdfView(ThemedReactContext context, AttributeSet set){
+        super(context,set);
+        this.context = context;
+        this.instance = this;
     }
 
     @Override
@@ -100,27 +108,6 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
             "topChange",
             event
          );
-    }
-
-    // In some cases Yoga (I think) will measure the view only along one axis first, resulting in
-    // onSizeChanged being called with either w or h set to zero. This in turn starts the rendering
-    // of the pdf under the hood with one dimension being set to zero and the follow-up call to
-    // onSizeChanged with the correct dimensions doesn't have any effect on the already started process.
-    // The offending class is DecodingAsyncTask, which tries to get width and height of the pdfView
-    // in the constructor, and is created as soon as the measurement is complete, which in some cases
-    // may be incomplete as described above.
-    // By delaying calling super.onSizeChanged until the size in both dimensions is correct we are able
-    // to prevent this from happening.
-    //
-    // I'm not sure whether the second condition is necessary, but without it, it would be impossible
-    // to set the dimensions to zero after first measurement.
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        if ((w > 0 && h > 0) || this.oldW > 0 || this.oldH > 0) {
-            super.onSizeChanged(w, h, this.oldW, this.oldH);
-            this.oldW = w;
-            this.oldH = h;
-        }
     }
 
     @Override
@@ -185,19 +172,17 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
         float pageWidth = this.toCurrentScale(pageSize.getWidth());
         float pageHeight = this.toCurrentScale(pageSize.getHeight());
 
-        float x = ((((Math.abs(this.getCurrentXOffset()) + e.getX()) / pageWidth) - currentPage)
-                * pageWidth
-                - (this.toCurrentScale(this.getSpacingPx()) * currentPage));
+        float x = ((((Math.abs(this.getCurrentXOffset()) + e.getX()) / pageWidth) - currentPage) * pageWidth - (this.toCurrentScale(this.getSpacingPx()) * currentPage));
         float y = (Math.abs(this.getCurrentYOffset()) + e.getY());
 
         WritableMap event = Arguments.createMap();
         event.putString("message",
-                "pageSingleTap"
-                +"|"+(currentPage + 1)
-                +"|"+pageWidth
-                +"|"+pageHeight
-                +"|"+x
-                +"|"+y);
+                        "pageSingleTap"
+                        +"|"+(currentPage + 1)
+                        +"|"+pageWidth
+                        +"|"+pageHeight
+                        +"|"+x
+                        +"|"+y);
 
         ReactContext reactContext = (ReactContext)this.getContext();
         reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
@@ -216,7 +201,7 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
         if (originalWidth == 0) {
             originalWidth = pageWidth;
         }
-        
+
         if (lastPageWidth>0 && lastPageHeight>0 && (pageWidth!=lastPageWidth || pageHeight!=lastPageHeight)) {
             // maybe change by other instance, restore zoom setting
             Constants.Pinch.MINIMUM_ZOOM = this.minScale;
@@ -287,7 +272,7 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
                 .autoSpacing(this.autoSpacing)
                 .pageFling(this.pageFling)
                 .enableSwipe(!this.singlePage)
-                .enableDoubletap(!this.singlePage && this.enableDoubleTapZoom)
+                .enableDoubletap(!this.singlePage)
                 .enableAnnotationRendering(this.enableAnnotationRendering)
                 .linkHandler(this);
 
@@ -300,10 +285,6 @@ public class PdfView extends PDFView implements OnPageChangeListener,OnLoadCompl
 
             configurator.load();
         }
-    }
-
-    public void setEnableDoubleTapZoom(boolean enableDoubleTapZoom) {
-        this.enableDoubleTapZoom = enableDoubleTapZoom;
     }
 
     public void setPath(String path) {
